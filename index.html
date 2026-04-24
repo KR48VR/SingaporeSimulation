@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Singapore Growth Simulation - Cadastral Map Timeline</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      --bg: #07111f;
+      --bg2: #0c1c31;
+      --panel: rgba(255,255,255,0.08);
+      --panel-strong: rgba(255,255,255,0.12);
+      --line: rgba(255,255,255,0.14);
+      --text: #eef4fb;
+      --muted: #b8c7da;
+      --muted2: #8da2ba;
+      --accent: #7ce9dc;
+      --accent2: #ffc85b;
+      --urban: #ff5f79;
+      --town: #6fb3ff;
+      --reclaim: #ffd976;
+      --green: #73d592;
+      --route: #67ead6;
+      --shadow: 0 18px 46px rgba(0,0,0,0.34);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(124,233,220,0.18), transparent 25%),
+        radial-gradient(circle at 92% 6%, rgba(255,200,91,0.14), transparent 20%),
+        linear-gradient(180deg, var(--bg), var(--bg2));
+    }
+
+    a { color: var(--accent); }
+
+    .app {
+      width: min(1480px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 22px 0 34px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 4.4rem);
+      line-height: 0.96;
+      letter-spacing: -0.06em;
+    }
+
+    .subtitle {
+      margin: 10px 0 0;
+      max-width: 900px;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 1rem;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 9px 12px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+      color: var(--muted);
+      font-size: 0.9rem;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(720px, 1.5fr) minmax(330px, 0.72fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.06));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      backdrop-filter: blur(14px);
+    }
+
+    .map-card { position: sticky; top: 12px; }
+
+    .map-wrap {
+      position: relative;
+      padding: 14px;
+    }
+
+    #map {
+      height: 700px;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: #10263b;
+    }
+
+    .map-overlay {
+      position: absolute;
+      top: 28px;
+      left: 28px;
+      right: 28px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: start;
+      pointer-events: none;
+      z-index: 500;
+    }
+
+    .year-chip, .stat-chip, .map-note {
+      pointer-events: auto;
+      background: rgba(3, 12, 22, 0.78);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.26);
+      backdrop-filter: blur(10px);
+    }
+
+    .year-chip {
+      min-width: 180px;
+      border-radius: 18px;
+      padding: 13px 15px;
+    }
+
+    .chip-kicker,
+    .metric .name,
+    .section-title,
+    .card-kicker {
+      color: var(--muted2);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .year-chip .big {
+      margin-top: 4px;
+      font-size: 2.2rem;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: -0.05em;
+    }
+
+    .map-note {
+      align-self: start;
+      justify-self: center;
+      border-radius: 16px;
+      padding: 10px 14px;
+      color: var(--muted);
+      max-width: 470px;
+      text-align: center;
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+
+    .stat-row {
+      justify-self: end;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .stat-chip {
+      min-width: 140px;
+      padding: 10px 12px;
+      border-radius: 16px;
+    }
+
+    .stat-chip .value {
+      margin-top: 3px;
+      font-size: 1rem;
+      font-weight: 850;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 14px 14px 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.06);
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .controls {
+      padding: 16px 18px 18px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+      background: rgba(4, 15, 27, 0.38);
+    }
+
+    .control-row {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 15px;
+      font-weight: 900;
+      cursor: pointer;
+      color: #07111f;
+      background: linear-gradient(180deg, #b5fff7, #67dfd1);
+      box-shadow: 0 10px 24px rgba(124,233,220,0.25);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    button.secondary {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: none;
+    }
+
+    button:hover { transform: translateY(-1px); filter: brightness(1.03); }
+    button:active { transform: translateY(1px); }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .timeline-readout {
+      min-width: 94px;
+      text-align: right;
+      font-weight: 900;
+    }
+
+    .slider-note {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      color: var(--muted2);
+      font-size: 0.82rem;
+    }
+
+    .slider-note strong { color: var(--text); }
+
+    .tick-strip {
+      margin-top: 9px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted2);
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .tick-strip span { opacity: 0.86; }
+
+    .milestone-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-top: 14px;
+      scrollbar-color: rgba(255,255,255,0.2) transparent;
+    }
+
+    .milestone-button {
+      flex: 0 0 auto;
+      padding: 8px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .milestone-button.active {
+      background: var(--accent2);
+      color: #07111f;
+      border-color: rgba(255,255,255,0.4);
+    }
+
+    .side-panel { padding: 20px; }
+
+    .card-kicker {
+      margin: 0 0 8px;
+      color: var(--accent);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(1.45rem, 2.2vw, 2.4rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .lead {
+      margin: 12px 0 16px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .metric {
+      min-height: 110px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.07);
+      padding: 13px;
+    }
+
+    .metric .number {
+      margin-top: 7px;
+      font-weight: 900;
+      font-size: 1.3rem;
+      letter-spacing: -0.03em;
+    }
+
+    .metric .note {
+      margin-top: 6px;
+      color: var(--muted2);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .bar-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) 48px;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 800;
+    }
+
+    .bar-bg {
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.09);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.35s ease;
+    }
+
+    .event-list {
+      display: grid;
+      gap: 9px;
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .event-list li {
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.055);
+      padding: 12px 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .event-list strong {
+      display: block;
+      color: var(--text);
+      font-size: 0.92rem;
+      margin-bottom: 3px;
+    }
+
+    .chart-card,
+    .notes-card {
+      margin-top: 18px;
+      padding: 20px;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 16px;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: rgba(3,12,22,0.42);
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .caption {
+      margin-top: 8px;
+      color: var(--muted2);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .note-box {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .sources {
+      margin: 14px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .label-marker {
+      background: transparent;
+      border: 0;
+    }
+
+    .map-label {
+      color: #f8fbff;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-shadow:
+        0 0 3px rgba(0,0,0,0.95),
+        0 0 8px rgba(0,0,0,0.75),
+        1px 1px 0 rgba(0,0,0,0.9);
+      white-space: nowrap;
+    }
+
+    .leaflet-container {
+      font: inherit;
+    }
+
+    .leaflet-control-attribution {
+      background: rgba(3, 12, 22, 0.82) !important;
+      color: var(--muted) !important;
+      border-top-left-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-bottom: none;
+      border-right: none;
+    }
+
+    .leaflet-control-attribution a { color: var(--accent) !important; }
+
+    .fallback {
+      padding: 14px;
+      margin-top: 10px;
+      display: none;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    @media (max-width: 1100px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .map-card { position: static; }
+      #map { height: 600px; }
+    }
+
+    @media (max-width: 760px) {
+      header { grid-template-columns: 1fr; }
+      .badges { justify-content: flex-start; }
+      .map-overlay {
+        grid-template-columns: 1fr;
+        left: 24px;
+        right: 24px;
+      }
+      .map-note { justify-self: stretch; max-width: none; }
+      .stat-row { justify-self: stretch; justify-content: flex-start; }
+      .control-row { grid-template-columns: repeat(4, auto); }
+      .control-row input[type="range"] { grid-column: 1 / -1; }
+      .timeline-readout { text-align: left; }
+      .metric-grid,
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Singapore growth simulation<br/>on a cadastral map</h1>
+        <p class="subtitle">
+          Explore how Singapore changed from the 1200s to the present using a current cadastral basemap as the spatial reference. The slider now uses <strong>100-year steps before British colonisation</strong>, <strong>decade steps from the 1820s to the 1950s</strong>, and <strong>5-year steps from 1960 onward</strong>.
+        </p>
+      </div>
+      <div class="badges">
+        <div class="badge">Basemap: OneMap LandLot cadastral layer</div>
+        <div class="badge">Timeline: 1200 to 2025</div>
+        <div class="badge">Mode: teaching simulation</div>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <section class="card map-card">
+        <div class="map-wrap">
+          <div id="map"></div>
+          <div class="map-overlay">
+            <div class="year-chip">
+              <div class="chip-kicker">Selected period</div>
+              <div class="big" id="periodLabel">1200s</div>
+            </div>
+            <div class="map-note" id="mapNote">
+              Current cadastral parcels are used as the base map; the historical footprints and reclamation overlays above them are generalized for explanation.
+            </div>
+            <div class="stat-row">
+              <div class="stat-chip">
+                <div class="chip-kicker">Population</div>
+                <div class="value" id="hudPopulation">uncounted</div>
+              </div>
+              <div class="stat-chip">
+                <div class="chip-kicker">Land area</div>
+                <div class="value" id="hudLand">natural island</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span><i class="swatch" style="background: var(--urban)"></i> historic core / CBD growth</span>
+          <span><i class="swatch" style="background: var(--town)"></i> new towns / later urban spread</span>
+          <span><i class="swatch" style="background: var(--reclaim)"></i> reclamation / major infrastructure</span>
+          <span><i class="swatch" style="background: var(--green)"></i> green planning zones</span>
+          <span><i class="swatch" style="background: var(--route)"></i> maritime routes</span>
+        </div>
+
+        <div class="controls">
+          <div class="control-row">
+            <button id="playButton" type="button">Play</button>
+            <button id="backButton" class="secondary" type="button">Back</button>
+            <input id="timelineSlider" type="range" min="0" max="0" value="0" step="1" aria-label="Timeline slider" />
+            <button id="forwardButton" class="secondary" type="button">Next</button>
+            <div class="timeline-readout" id="timelineReadout">1200s</div>
+          </div>
+          <div class="slider-note">
+            <span><strong>Step rule:</strong> centuries before 1819, decades after colonisation, 5-year steps from 1960.</span>
+            <span id="stepTypeLabel">Current step: 100-year interval</span>
+          </div>
+          <div class="tick-strip">
+            <span>1200s</span>
+            <span>1820s</span>
+            <span>1900s</span>
+            <span>1960</span>
+            <span>1985</span>
+            <span>2005</span>
+            <span>2025</span>
+          </div>
+          <div class="milestone-strip" id="milestoneStrip"></div>
+          <div class="fallback" id="mapFallback">If the cadastral basemap does not load, check that internet access is enabled. The simulation still keeps the historical timeline data and charts.</div>
+        </div>
+      </section>
+
+      <aside class="card side-panel">
+        <p class="card-kicker">Focused view</p>
+        <h2 id="eraTitle">Maritime crossroads before Singapura</h2>
+        <p class="lead" id="eraDesc">The island sits on major sea lanes. The map emphasizes a natural coastline, mangrove edges, and small settlement intensity rather than any precise census count.</p>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="name">Population</div>
+            <div class="number" id="metricPopulation">No reliable census</div>
+            <div class="note" id="metricPopulationNote">Pre-1819 population is shown qualitatively as settlement intensity.</div>
+          </div>
+          <div class="metric">
+            <div class="name">Land area</div>
+            <div class="number" id="metricLand">about 578 sq km</div>
+            <div class="note" id="metricLandNote">Approximate natural-island baseline before the official modern series.</div>
+          </div>
+          <div class="metric">
+            <div class="name">Timeline step</div>
+            <div class="number" id="metricStep">100-year interval</div>
+            <div class="note" id="metricStepNote">The selected stop belongs to the pre-colonial century sequence.</div>
+          </div>
+          <div class="metric">
+            <div class="name">Map reference</div>
+            <div class="number">Cadastral parcels</div>
+            <div class="note">Basemap is the current OneMap LandLot layer; overlays remain schematic for history teaching.</div>
+          </div>
+        </div>
+
+        <div class="section-title">Development profile</div>
+        <div class="bar-list">
+          <div class="bar-row"><span>Urban</span><div class="bar-bg"><div id="barUrban" class="bar-fill"></div></div><span id="barUrbanText">0%</span></div>
+          <div class="bar-row"><span>Port</span><div class="bar-bg"><div id="barPort" class="bar-fill"></div></div><span id="barPortText">0%</span></div>
+          <div class="bar-row"><span>Reclaim</span><div class="bar-bg"><div id="barReclaim" class="bar-fill"></div></div><span id="barReclaimText">0%</span></div>
+          <div class="bar-row"><span>Transit</span><div class="bar-bg"><div id="barTransit" class="bar-fill"></div></div><span id="barTransitText">0%</span></div>
+          <div class="bar-row"><span>Green</span><div class="bar-bg"><div id="barGreen" class="bar-fill"></div></div><span id="barGreenText">0%</span></div>
+        </div>
+
+        <div class="section-title">Key events near this stop</div>
+        <ul class="event-list" id="eventList"></ul>
+      </aside>
+    </main>
+
+    <section class="card chart-card">
+      <p class="card-kicker">Data traces</p>
+      <h2>Population and land-area change</h2>
+      <p class="lead">The charts anchor the simulation with known census and official modern data. Earlier centuries remain illustrative, while population after 1950 and land area after 1960 are tied to official modern series and interpolated between selected points for the timeline stops.</p>
+      <div class="chart-grid">
+        <div>
+          <canvas id="populationChart" width="620" height="240" aria-label="Population chart"></canvas>
+          <div class="caption">Population uses historical census points and modern official data. The plot uses a log scale because growth is large over time.</div>
+        </div>
+        <div>
+          <canvas id="landChart" width="620" height="240" aria-label="Land area chart"></canvas>
+          <div class="caption">Land area remains near the natural-island baseline before 1960, then follows the official modern series as reclamation expands Singapore.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card notes-card">
+      <p class="card-kicker">Sources and caveats</p>
+      <h2>What changed in this version</h2>
+      <div class="note-box">
+        This version switches the visual reference from a stylized map to the <strong>OneMap LandLot cadastral basemap</strong>. Because present-day parcels are being used to teach a long historical timeline, the historical overlays are intentionally generalized and should not be read as exact historical lot boundaries or exact shorelines for earlier centuries.
+      </div>
+      <ol class="sources">
+        <li><a href="https://www.onemap.gov.sg/docs/maps/landlot.html" target="_blank" rel="noopener">OneMap LandLot basemap documentation</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=7dc04ff9-f9fb-44ba-867e-8b714f87b324" target="_blank" rel="noopener">National Library Board: Sang Nila Utama and the 1299 Singapura tradition</a></li>
+        <li><a href="https://www.nhb.gov.sg/nationalmuseum/-/media/nms2017/documents/school-programmes/teachers-hi-resource-unit-1-precolonial.pdf" target="_blank" rel="noopener">National Heritage Board: Singapura before 1819</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=92bb56f0-e821-40d1-bd8c-cf8fa7e7f172" target="_blank" rel="noopener">National Library Board: 1819 Singapore Treaty</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=2fb8948b-5f16-4a7a-8e3c-7a724e1eb6ad" target="_blank" rel="noopener">National Library Board: First census of Singapore, 1824</a></li>
+        <li><a href="https://www.hdb.gov.sg/about-us/our-story/our-history" target="_blank" rel="noopener">Housing and Development Board: HDB history</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=9641f35d-3ae5-41d8-9fa6-7ca8b845ea53" target="_blank" rel="noopener">National Library Board: Separation and independence in 1965</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=68246555-3f57-45cb-8a3f-d3813ee6bc5a" target="_blank" rel="noopener">National Library Board: Changi Airport</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=e926e24f-9c14-482b-b278-d582b535deb6" target="_blank" rel="noopener">National Library Board: MRT system</a></li>
+        <li><a href="https://www.nlb.gov.sg/main/article-detail?cmsuuid=64fae4f4-99b8-4d72-9691-851bc0894489" target="_blank" rel="noopener">National Library Board: Marina Bay</a></li>
+        <li><a href="https://data.gov.sg/datasets/d_3d227e5d9fdec73f3bcadce671c333a6/view" target="_blank" rel="noopener">data.gov.sg / SingStat: Indicators on Population, Annual</a></li>
+        <li><a href="https://data.gov.sg/datasets/d_0b2c034da121ef8efc71949af1694b4d/view" target="_blank" rel="noopener">data.gov.sg / SingStat: Land Area, Annual</a></li>
+      </ol>
+    </section>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    const timelineYears = [
+      1200, 1300, 1400, 1500, 1600, 1700, 1800,
+      1820, 1830, 1840, 1850, 1860, 1870, 1880, 1890, 1900, 1910, 1920, 1930, 1940, 1950,
+      1960, 1965, 1970, 1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025
+    ];
+
+    const populationPoints = [
+      { year: 1819, value: 1000, quality: 'estimate' },
+      { year: 1824, value: 10683, quality: 'census' },
+      { year: 1871, value: 97111, quality: 'census' },
+      { year: 1901, value: 228555, quality: 'census' },
+      { year: 1931, value: 557745, quality: 'census' },
+      { year: 1950, value: 1022100, quality: 'official series' },
+      { year: 1957, value: 1445929, quality: 'official series' },
+      { year: 1960, value: 1646400, quality: 'official series' },
+      { year: 1970, value: 2074507, quality: 'official series' },
+      { year: 1980, value: 2413945, quality: 'official series' },
+      { year: 1990, value: 3047132, quality: 'official series' },
+      { year: 2000, value: 4027887, quality: 'official series' },
+      { year: 2010, value: 5076732, quality: 'official series' },
+      { year: 2020, value: 5685807, quality: 'official series' },
+      { year: 2025, value: 6111175, quality: 'latest official' }
+    ];
+
+    const landPoints = [
+      { year: 1200, value: 578.0, quality: 'approx natural island' },
+      { year: 1819, value: 578.0, quality: 'approx natural island' },
+      { year: 1960, value: 581.5, quality: 'official series' },
+      { year: 1970, value: 586.4, quality: 'official series' },
+      { year: 1980, value: 617.8, quality: 'official series' },
+      { year: 1990, value: 633.0, quality: 'official series' },
+      { year: 2000, value: 682.7, quality: 'official series' },
+      { year: 2010, value: 712.4, quality: 'official series' },
+      { year: 2020, value: 728.3, quality: 'official series' },
+      { year: 2025, value: 744.3, quality: 'latest official' }
+    ];
+
+    const profileAnchors = [
+      { year: 1200, urban: 4, port: 8, reclaim: 0, transit: 0, green: 10 },
+      { year: 1300, urban: 10, port: 40, reclaim: 0, transit: 0, green: 10 },
+      { year: 1600, urban: 5, port: 16, reclaim: 0, transit: 0, green: 12 },
+      { year: 1820, urban: 16, port: 58, reclaim: 1, transit: 0, green: 9 },
+      { year: 1870, urban: 30, port: 74, reclaim: 3, transit: 5, green: 9 },
+      { year: 1940, urban: 38, port: 46, reclaim: 4, transit: 5, green: 8 },
+      { year: 1960, urban: 52, port: 66, reclaim: 10, transit: 8, green: 18 },
+      { year: 1980, urban: 70, port: 80, reclaim: 38, transit: 38, green: 42 },
+      { year: 2000, urban: 84, port: 88, reclaim: 66, transit: 62, green: 58 },
+      { year: 2015, urban: 93, port: 92, reclaim: 84, transit: 88, green: 78 },
+      { year: 2025, urban: 96, port: 94, reclaim: 92, transit: 94, green: 82 }
+    ];
+
+    const milestones = [
+      { year: 1299, label: 'Singapura tradition', text: 'The Malay Annals tradition connects Sang Nila Utama with the founding of Singapura around 1299.' },
+      { year: 1320, label: 'Temasek records', text: 'Chinese and regional records point to Temasek as a 14th-century trading settlement.' },
+      { year: 1819, label: 'British trading post', text: 'The 1819 treaty establishes a British East India Company trading post.' },
+      { year: 1824, label: 'First census', text: 'The first census records 10,683 residents, showing rapid early growth.' },
+      { year: 1869, label: 'Suez Canal era', text: 'The opening of the Suez Canal strengthens Singapore as a strategic entrepot.' },
+      { year: 1942, label: 'Japanese Occupation', text: 'Singapore falls to Japan in 1942 and remains occupied until 1945.' },
+      { year: 1960, label: 'HDB founded', text: 'HDB is created to tackle acute housing shortages and build new flats at scale.' },
+      { year: 1965, label: 'Independence', text: 'Singapore becomes an independent sovereign state on 9 August 1965.' },
+      { year: 1967, label: 'Garden City', text: 'The Garden City vision integrates greening into urban development.' },
+      { year: 1981, label: 'Changi opens', text: 'Changi Airport opens, shifting the main international air gateway east.' },
+      { year: 1987, label: 'MRT begins', text: 'The first MRT line begins operations, reshaping future urban growth.' },
+      { year: 1991, label: 'Marina Bay planning', text: 'Long-term plans consolidate the expansion of the downtown waterfront.' },
+      { year: 2008, label: 'Marina Bay Sands era', text: 'The Marina Bay district becomes a defining modern waterfront expansion.' },
+      { year: 2025, label: 'Latest official point', text: 'The simulation uses 2025 official population and land-area figures for the present day.' }
+    ];
+
+    const timelineButtons = [1299, 1819, 1824, 1942, 1960, 1965, 1981, 1987, 2008, 2025];
+
+    function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    function findBracketing(points, year) {
+      if (year <= points[0].year) return [points[0], points[0], 0];
+      if (year >= points[points.length - 1].year) return [points[points.length - 1], points[points.length - 1], 0];
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i];
+        const b = points[i + 1];
+        if (year >= a.year && year <= b.year) {
+          const t = (year - a.year) / (b.year - a.year);
+          return [a, b, t];
+        }
+      }
+      return [points[0], points[0], 0];
+    }
+
+    function interpolated(points, year) {
+      const [a, b, t] = findBracketing(points, year);
+      return {
+        value: lerp(a.value, b.value, t),
+        exact: a.year === year || b.year === year,
+        from: a.year,
+        to: b.year,
+        quality: a.year === b.year ? a.quality : a.quality + ' to ' + b.quality
+      };
+    }
+
+    function formatNumber(n) {
+      return Math.round(n).toLocaleString('en-SG');
+    }
+
+    function formatPopulation(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(2).replace(/\.00$/, '') + 'M';
+      if (n >= 1000) return formatNumber(n);
+      return String(Math.round(n));
+    }
+
+    function getPeriodLabel(year) {
+      if (year < 1820) return year + 's';
+      if (year < 1960) return year + 's';
+      return String(year);
+    }
+
+    function getStepType(year) {
+      if (year < 1820) return {
+        label: '100-year interval',
+        note: 'The selected stop belongs to the pre-colonial century sequence.'
+      };
+      if (year < 1960) return {
+        label: '10-year interval',
+        note: 'The selected stop belongs to the decade-by-decade colonial and post-war sequence.'
+      };
+      return {
+        label: '5-year interval',
+        note: 'The selected stop belongs to the 5-year sequence used from 1960 onward.'
+      };
+    }
+
+    function populationInfo(year) {
+      if (year < 1819) {
+        return {
+          display: 'No reliable census',
+          hud: 'uncounted',
+          note: 'Pre-1819 population is visualized qualitatively as settlement intensity rather than a precise count.'
+        };
+      }
+      const dataYear = year;
+      const p = interpolated(populationPoints, dataYear);
+      const prefix = p.exact ? '' : 'about ';
+      return {
+        display: prefix + formatPopulation(p.value),
+        hud: prefix + formatPopulation(p.value),
+        note: p.exact ? 'Selected stop aligns with a stored census or official point.' : 'Interpolated between nearby census or official points for this timeline stop.'
+      };
+    }
+
+    function landInfo(year) {
+      if (year < 1960) {
+        return {
+          display: 'about 578 sq km',
+          hud: 'natural island',
+          note: 'Approximate natural-island baseline before the official annual land-area series begins in 1960.'
+        };
+      }
+      const l = interpolated(landPoints, year);
+      const prefix = l.exact ? '' : 'about ';
+      return {
+        display: prefix + l.value.toFixed(1) + ' sq km',
+        hud: prefix + l.value.toFixed(1) + ' sq km',
+        note: l.exact ? 'Selected stop aligns with a stored official or latest point.' : 'Interpolated from the official modern land-area series.'
+      };
+    }
+
+    function profileForYear(year) {
+      const values = {};
+      ['urban', 'port', 'reclaim', 'transit', 'green'].forEach(key => {
+        values[key] = interpolated(profileAnchors.map(p => ({ year: p.year, value: p[key], quality: 'profile anchor' })), year).value;
+      });
+      return values;
+    }
+
+    function themeForYear(year) {
+      if (year <= 1200) {
+        return {
+          title: 'Maritime crossroads before Singapura',
+          desc: 'The island sits on important regional sea routes. The map emphasizes natural coast, mangroves, and very limited settlement intensity.',
+          mapNote: 'A present-day cadastral basemap is used as spatial reference. For this early period, the overlays mainly show maritime context and the future core area.'
+        };
+      }
+      if (year === 1300) {
+        return {
+          title: 'Temasek / Singapura as a port settlement',
+          desc: 'Archaeology and historical records point to a significant 14th-century settlement around the Singapore River and Fort Canning area.',
+          mapNote: 'The cadastral parcels are current, while the medieval settlement overlay is schematic and centered on the river-mouth core.'
+        };
+      }
+      if (year < 1820) {
+        return {
+          title: 'Post-medieval harbor zone',
+          desc: 'After the medieval port era, the island remains part of wider maritime networks but without a large modern urban footprint.',
+          mapNote: 'The base map remains current; the historical overlay keeps the island lightly settled to reflect the absence of modern urban build-out.'
+        };
+      }
+      if (year < 1860) {
+        return {
+          title: 'British free-port takeoff',
+          desc: 'After 1819, the settlement near the river mouth expands rapidly as a colonial free port attracts migrants, trade, warehousing, and shipping activity.',
+          mapNote: 'The highlighted south-coast and river areas show the colonial core emerging on top of the present cadastral map.'
+        };
+      }
+      if (year < 1920) {
+        return {
+          title: 'Colonial port city and entrepot hub',
+          desc: 'Commercial districts, docks, and shophouse neighborhoods thicken around the Singapore River, Tanjong Pagar, and adjoining southern districts.',
+          mapNote: 'The cadastral basemap helps anchor where the colonial core, docks, and rail-linked areas sit in today\'s city.'
+        };
+      }
+      if (year < 1940) {
+        return {
+          title: 'Late colonial metropolis',
+          desc: 'By the interwar decades, Singapore is a denser colonial city with a larger port economy and a broader urban footprint around the southern and central districts.',
+          mapNote: 'The historical overlays broaden around the core to reflect pre-war urban concentration on the south and central parts of the island.'
+        };
+      }
+      if (year === 1940) {
+        return {
+          title: 'War decade and occupation shock',
+          desc: 'The 1940s are shown as a period of major disruption. Port and city structures remain, but wartime occupation interrupts development.',
+          mapNote: 'Urban and port overlays remain visible, but the period is interpreted as disruption rather than expansion.'
+        };
+      }
+      if (year < 1960) {
+        return {
+          title: 'Recovery, self-government, and housing pressure',
+          desc: 'Population growth intensifies pressure on housing and infrastructure in the post-war years. The modern planning challenge is taking shape.',
+          mapNote: 'The map begins to hint at the broader island-wide growth pressures that will define the post-1960 new-town era.'
+        };
+      }
+      if (year < 1980) {
+        return {
+          title: 'Nation-building, new towns, and industrial spread',
+          desc: 'HDB estates, Jurong industrialization, and the first big waves of planning transform growth from a port city pattern into an island-wide urban system.',
+          mapNote: 'The cadastral map makes it easier to locate early new towns and industrial expansion beyond the colonial core.'
+        };
+      }
+      if (year < 2000) {
+        return {
+          title: 'Infrastructure city: Changi, MRT, and reclamation',
+          desc: 'The city-state spreads through reclamation, new-town growth, airport development, and the expanding MRT network.',
+          mapNote: 'Reclamation and major infrastructure overlays become more prominent, especially at East Coast, Changi, and western industrial areas.'
+        };
+      }
+      if (year < 2015) {
+        return {
+          title: 'Global city and waterfront expansion',
+          desc: 'The CBD grows vertically, Marina Bay emerges on reclaimed land, and the metropolitan footprint becomes denser and more connected.',
+          mapNote: 'Modern downtown expansion and reclaimed-waterfront areas are highlighted against the land-lot basemap.'
+        };
+      }
+      return {
+        title: 'Dense green city-state',
+        desc: 'Present-day Singapore combines a dense urban fabric, extensive reclamation, rail-based mobility, and strong greening and resilience planning.',
+        mapNote: 'The current cadastral basemap and the latest overlays are closest in time here, showing how the historical layers accumulate into the present city-state.'
+      };
+    }
+
+    function eventWindow(year) {
+      if (year < 1820) return 99;
+      if (year < 1960) return 9;
+      return 4;
+    }
+
+    function eventsForYear(year) {
+      const span = eventWindow(year);
+      let events = milestones.filter(m => m.year >= year && m.year <= year + span);
+      if (events.length < 3) {
+        const mid = year + span / 2;
+        const extra = milestones
+          .filter(m => !events.includes(m))
+          .map(m => ({ ...m, dist: Math.abs(m.year - mid) }))
+          .sort((a, b) => a.dist - b.dist)
+          .slice(0, 3 - events.length);
+        events = events.concat(extra);
+      }
+      return events.slice(0, 4);
+    }
+
+    function nearestTimelineYear(targetYear) {
+      return timelineYears.reduce((best, year) => Math.abs(year - targetYear) < Math.abs(best - targetYear) ? year : best, timelineYears[0]);
+    }
+
+    const slider = document.getElementById('timelineSlider');
+    const playButton = document.getElementById('playButton');
+    const backButton = document.getElementById('backButton');
+    const forwardButton = document.getElementById('forwardButton');
+    const timelineReadout = document.getElementById('timelineReadout');
+    const milestoneStrip = document.getElementById('milestoneStrip');
+
+    slider.max = String(timelineYears.length - 1);
+
+    let currentIndex = 0;
+    let playTimer = null;
+
+    let map = null;
+    let overlayLayer = null;
+    let routeLayer = null;
+    let labelLayer = null;
+    let leafletReady = false;
+
+    function setBar(name, value) {
+      document.getElementById('bar' + name).style.width = value + '%';
+      document.getElementById('bar' + name + 'Text').textContent = Math.round(value) + '%';
+    }
+
+    function initMap() {
+      if (typeof L === 'undefined') {
+        document.getElementById('mapFallback').style.display = 'block';
+        return;
+      }
+
+      map = L.map('map', {
+        zoomControl: true,
+        scrollWheelZoom: true,
+        attributionControl: true,
+        preferCanvas: true
+      }).setView([1.3521, 103.8198], 11);
+
+      L.tileLayer('https://www.onemap.gov.sg/maps/tiles/LandLot/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        minZoom: 10,
+        attribution: 'Basemap: OneMap LandLot / Singapore Land Authority'
+      }).addTo(map);
+
+      overlayLayer = L.layerGroup().addTo(map);
+      routeLayer = L.layerGroup().addTo(map);
+      labelLayer = L.layerGroup().addTo(map);
+
+      leafletReady = true;
+
+      setTimeout(() => {
+        const container = document.querySelector('#map .leaflet-tile-container');
+        if (!container || !container.children.length) {
+          document.getElementById('mapFallback').style.display = 'block';
+        }
+      }, 3000);
+    }
+
+    const mapFeatures = [
+      { type: 'route', start: 1200, end: 1900, coords: [[1.18,103.55],[1.24,103.68],[1.27,103.82],[1.30,103.96],[1.34,104.08]] },
+      { type: 'route', start: 1200, end: 1700, coords: [[1.16,103.74],[1.24,103.80],[1.29,103.87],[1.33,103.95]] },
+      { type: 'circle', start: 1300, end: 1600, coords: [1.2875,103.8495], radius: 1500, color: '#ff5f79', fillOpacity: 0.34, weight: 1.2, label: 'Temasek core', labelCoords: [1.2915,103.857] },
+      { type: 'circle', start: 1300, end: 1600, coords: [1.295,103.845], radius: 700, color: '#ffd976', fillOpacity: 0.28, weight: 1.2, label: 'Fort Canning / hill', labelCoords: [1.300,103.842] },
+      { type: 'circle', start: 1820, coords: [1.2868,103.849], radius: 1800, color: '#ff5f79', fillOpacity: 0.28, weight: 1.3, label: 'River / colonial core', labelCoords: [1.291,103.864] },
+      { type: 'circle', start: 1830, coords: [1.2795,103.851], radius: 1200, color: '#ffd976', fillOpacity: 0.22, weight: 1.2, label: 'River port', labelCoords: [1.274,103.857] },
+      { type: 'circle', start: 1860, coords: [1.2755,103.841], radius: 1500, color: '#ff5f79', fillOpacity: 0.24, weight: 1.2, label: 'Tanjong Pagar', labelCoords: [1.268,103.836] },
+      { type: 'circle', start: 1880, coords: [1.299,103.855], radius: 1200, color: '#6fb3ff', fillOpacity: 0.22, weight: 1.2, label: 'Kallang / Rochor growth', labelCoords: [1.307,103.873] },
+      { type: 'circle', start: 1900, coords: [1.319,103.814], radius: 1300, color: '#6fb3ff', fillOpacity: 0.20, weight: 1.2, label: 'Bukit Timah corridor', labelCoords: [1.324,103.800] },
+      { type: 'circle', start: 1950, coords: [1.295,103.806], radius: 1500, color: '#6fb3ff', fillOpacity: 0.24, weight: 1.2, label: 'Queenstown', labelCoords: [1.290,103.793] },
+      { type: 'circle', start: 1960, coords: [1.333,103.849], radius: 1700, color: '#6fb3ff', fillOpacity: 0.26, weight: 1.2, label: 'Toa Payoh', labelCoords: [1.337,103.862] },
+      { type: 'circle', start: 1965, coords: [1.333,103.742], radius: 2100, color: '#6fb3ff', fillOpacity: 0.28, weight: 1.2, label: 'Jurong', labelCoords: [1.335,103.724] },
+      { type: 'polygon', start: 1965, color: '#ffd976', fillOpacity: 0.22, weight: 1.2, label: 'East Coast reclamation', labelCoords: [1.300,103.925], coords: [[1.289,103.889],[1.289,103.950],[1.303,103.954],[1.309,103.915],[1.306,103.890]] },
+      { type: 'circle', start: 1970, coords: [1.369,103.849], radius: 1900, color: '#6fb3ff', fillOpacity: 0.24, weight: 1.2, label: 'Ang Mo Kio', labelCoords: [1.374,103.869] },
+      { type: 'circle', start: 1975, coords: [1.352,103.944], radius: 2100, color: '#6fb3ff', fillOpacity: 0.24, weight: 1.2, label: 'Tampines', labelCoords: [1.359,103.959] },
+      { type: 'polygon', start: 1980, color: '#ffd976', fillOpacity: 0.22, weight: 1.2, label: 'Changi Airport', labelCoords: [1.356,103.995], coords: [[1.334,103.965],[1.336,104.010],[1.361,104.018],[1.367,103.974],[1.354,103.955]] },
+      { type: 'circle', start: 1985, coords: [1.437,103.786], radius: 1800, color: '#6fb3ff', fillOpacity: 0.24, weight: 1.2, label: 'Woodlands', labelCoords: [1.442,103.801] },
+      { type: 'line', start: 1987, color: '#73d592', opacity: 0.85, weight: 5, label: 'Early MRT spine', labelCoords: [1.328,103.852], coords: [[1.44,103.79],[1.40,103.82],[1.36,103.84],[1.33,103.85],[1.30,103.85],[1.28,103.85],[1.31,103.88],[1.35,103.95]] },
+      { type: 'polygon', start: 1990, color: '#ffd976', fillOpacity: 0.22, weight: 1.2, label: 'Marina Bay reclamation', labelCoords: [1.281,103.866], coords: [[1.272,103.850],[1.272,103.875],[1.286,103.878],[1.289,103.858],[1.281,103.848]] },
+      { type: 'line', start: 1995, color: '#73d592', opacity: 0.85, weight: 5, label: 'MRT expansion', labelCoords: [1.365,103.901], coords: [[1.44,103.79],[1.42,103.90],[1.40,103.91],[1.37,103.90],[1.33,103.88],[1.28,103.85],[1.25,103.82],[1.31,103.74]] },
+      { type: 'circle', start: 2000, coords: [1.282,103.859], radius: 1100, color: '#ff5f79', fillOpacity: 0.28, weight: 1.2, label: 'Marina Bay', labelCoords: [1.278,103.872] },
+      { type: 'circle', start: 2000, coords: [1.404,103.902], radius: 1600, color: '#6fb3ff', fillOpacity: 0.22, weight: 1.2, label: 'Punggol', labelCoords: [1.412,103.917] },
+      { type: 'polygon', start: 2000, color: '#ffd976', fillOpacity: 0.22, weight: 1.2, label: 'Jurong Island', labelCoords: [1.266,103.701], coords: [[1.245,103.675],[1.245,103.720],[1.273,103.724],[1.286,103.694],[1.278,103.669]] },
+      { type: 'line', start: 2010, color: '#73d592', opacity: 0.85, weight: 5, label: 'Rail network', labelCoords: [1.299,103.785], coords: [[1.45,103.79],[1.42,103.86],[1.40,103.91],[1.37,103.95],[1.33,103.92],[1.29,103.89],[1.26,103.85],[1.29,103.81],[1.33,103.74],[1.36,103.79],[1.31,103.88]] },
+      { type: 'polygon', start: 2015, color: '#ffd976', fillOpacity: 0.2, weight: 1.2, label: 'Tuas port / western works', labelCoords: [1.297,103.642], coords: [[1.282,103.612],[1.282,103.665],[1.305,103.675],[1.314,103.635],[1.303,103.607]] },
+      { type: 'circle', start: 1967, coords: [1.359,103.81], radius: 5200, color: '#73d592', fillOpacity: 0.10, weight: 1.1, label: 'Central catchment / greening', labelCoords: [1.371,103.804] }
+    ];
+
+    function clearLayers() {
+      if (!leafletReady) return;
+      overlayLayer.clearLayers();
+      routeLayer.clearLayers();
+      labelLayer.clearLayers();
+    }
+
+    function addLabel(text, coords) {
+      const icon = L.divIcon({
+        className: 'label-marker',
+        html: '<div class="map-label">' + text + '</div>',
+        iconSize: [10, 10]
+      });
+      L.marker(coords, { icon, interactive: false }).addTo(labelLayer);
+    }
+
+    function drawMap(year) {
+      if (!leafletReady) return;
+      clearLayers();
+
+      mapFeatures.forEach(feature => {
+        const featureEnd = feature.end || Infinity;
+        if (year < feature.start || year > featureEnd) return;
+
+        let layer;
+        if (feature.type === 'circle') {
+          layer = L.circle(feature.coords, {
+            radius: feature.radius,
+            color: feature.color,
+            weight: feature.weight || 1.2,
+            fillColor: feature.color,
+            fillOpacity: feature.fillOpacity || 0.22,
+            opacity: 0.9
+          }).addTo(overlayLayer);
+        } else if (feature.type === 'polygon') {
+          layer = L.polygon(feature.coords, {
+            color: feature.color,
+            weight: feature.weight || 1.2,
+            fillColor: feature.color,
+            fillOpacity: feature.fillOpacity || 0.22,
+            opacity: 0.9
+          }).addTo(overlayLayer);
+        } else if (feature.type === 'line') {
+          layer = L.polyline(feature.coords, {
+            color: feature.color || '#73d592',
+            weight: feature.weight || 4,
+            opacity: feature.opacity || 0.8,
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(overlayLayer);
+        } else if (feature.type === 'route') {
+          layer = L.polyline(feature.coords, {
+            color: '#67ead6',
+            weight: 3,
+            opacity: 0.65,
+            dashArray: '10 12',
+            lineCap: 'round'
+          }).addTo(routeLayer);
+        }
+
+        if (layer && feature.label && feature.labelCoords) {
+          addLabel(feature.label, feature.labelCoords);
+        }
+      });
+
+      if (year < 1820) {
+        map.setView([1.300, 103.84], 11);
+      } else if (year < 1960) {
+        map.setView([1.315, 103.845], 11);
+      } else if (year < 1980) {
+        map.setView([1.335, 103.83], 11);
+      } else {
+        map.setView([1.3521, 103.8198], 11);
+      }
+    }
+
+    function drawChart(canvas, points, selectedYear, options) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const pad = { l: 52, r: 22, t: 22, b: 38 };
+      ctx.clearRect(0, 0, w, h);
+
+      const xMin = 1200;
+      const xMax = 2025;
+      const values = points.map(p => options.transform ? options.transform(p.value) : p.value);
+      const yMin = Math.min.apply(null, values);
+      const yMax = Math.max.apply(null, values);
+      const x = year => pad.l + ((year - xMin) / (xMax - xMin)) * (w - pad.l - pad.r);
+      const y = value => {
+        const v = options.transform ? options.transform(value) : value;
+        return h - pad.b - ((v - yMin) / (yMax - yMin || 1)) * (h - pad.t - pad.b);
+      };
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        const gy = pad.t + (i * (h - pad.t - pad.b)) / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, gy);
+        ctx.lineTo(w - pad.r, gy);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = 'rgba(238,244,251,0.92)';
+      ctx.font = '800 13px system-ui, sans-serif';
+      ctx.fillText(options.title, pad.l, 15);
+
+      ctx.fillStyle = 'rgba(185,200,217,0.82)';
+      ctx.font = '700 12px system-ui, sans-serif';
+      ['1200', '1819', '1965', '2025'].forEach(label => {
+        const year = Number(label);
+        const tx = x(year);
+        ctx.fillText(label, tx - 14, h - 12);
+      });
+
+      ctx.strokeStyle = options.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const px = x(p.year);
+        const py = y(p.value);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      points.forEach(p => {
+        ctx.beginPath();
+        ctx.fillStyle = options.color;
+        ctx.arc(x(p.year), y(p.value), 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      const cursorX = x(selectedYear);
+      ctx.strokeStyle = 'rgba(255,200,91,0.95)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cursorX, pad.t);
+      ctx.lineTo(cursorX, h - pad.b);
+      ctx.stroke();
+
+      const valueInfo = interpolated(points, selectedYear < points[0].year ? points[0].year : selectedYear);
+      const valueLabel = options.valueLabel(valueInfo.value);
+      const boxX = Math.min(w - 146, Math.max(pad.l, cursorX + 8));
+      const boxY = pad.t + 10;
+      ctx.fillStyle = 'rgba(3,12,22,0.92)';
+      ctx.fillRect(boxX, boxY, 124, 34);
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.strokeRect(boxX, boxY, 124, 34);
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
+      ctx.font = '800 12px system-ui, sans-serif';
+      ctx.fillText(valueLabel, boxX + 8, boxY + 22);
+    }
+
+    function drawCharts(selectedYear) {
+      drawChart(document.getElementById('populationChart'), populationPoints, Math.max(selectedYear, 1819), {
+        title: 'Population growth (log scale)',
+        color: '#7ce9dc',
+        transform: value => Math.log10(Math.max(value, 1)),
+        valueLabel: value => formatPopulation(value)
+      });
+      drawChart(document.getElementById('landChart'), landPoints, Math.max(selectedYear, 1200), {
+        title: 'Land area growth',
+        color: '#ffc85b',
+        valueLabel: value => value.toFixed(1) + ' sq km'
+      });
+    }
+
+    function updateMilestoneButtons(year) {
+      document.querySelectorAll('.milestone-button').forEach(btn => {
+        const target = Number(btn.dataset.year);
+        btn.classList.toggle('active', nearestTimelineYear(target) === year);
+      });
+    }
+
+    function buildMilestones() {
+      milestoneStrip.innerHTML = '';
+      timelineButtons.forEach(mYear => {
+        const milestone = milestones.find(m => m.year === mYear) || { year: mYear, label: 'Milestone' };
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'milestone-button';
+        button.dataset.year = String(mYear);
+        button.textContent = milestone.year + ': ' + milestone.label;
+        button.addEventListener('click', () => updateByYear(nearestTimelineYear(mYear)));
+        milestoneStrip.appendChild(button);
+      });
+    }
+
+    function updateEventList(year) {
+      const list = document.getElementById('eventList');
+      list.innerHTML = '';
+      eventsForYear(year).forEach(event => {
+        const li = document.createElement('li');
+        li.innerHTML = '<strong>' + event.year + ' - ' + event.label + '</strong>' + event.text;
+        list.appendChild(li);
+      });
+    }
+
+    function updatePanel(year) {
+      const period = getPeriodLabel(year);
+      const step = getStepType(year);
+      const pop = populationInfo(year);
+      const land = landInfo(year);
+      const profile = profileForYear(year);
+      const theme = themeForYear(year);
+
+      document.getElementById('periodLabel').textContent = period;
+      timelineReadout.textContent = period;
+      document.getElementById('stepTypeLabel').textContent = 'Current step: ' + step.label;
+      document.getElementById('hudPopulation').textContent = pop.hud;
+      document.getElementById('hudLand').textContent = land.hud;
+      document.getElementById('mapNote').textContent = theme.mapNote;
+      document.getElementById('eraTitle').textContent = theme.title;
+      document.getElementById('eraDesc').textContent = theme.desc;
+      document.getElementById('metricPopulation').textContent = pop.display;
+      document.getElementById('metricPopulationNote').textContent = pop.note;
+      document.getElementById('metricLand').textContent = land.display;
+      document.getElementById('metricLandNote').textContent = land.note;
+      document.getElementById('metricStep').textContent = step.label;
+      document.getElementById('metricStepNote').textContent = step.note;
+
+      setBar('Urban', profile.urban);
+      setBar('Port', profile.port);
+      setBar('Reclaim', profile.reclaim);
+      setBar('Transit', profile.transit);
+      setBar('Green', profile.green);
+
+      updateEventList(year);
+      updateMilestoneButtons(year);
+    }
+
+    function update(index) {
+      currentIndex = Math.max(0, Math.min(timelineYears.length - 1, index));
+      slider.value = String(currentIndex);
+      const year = timelineYears[currentIndex];
+      updatePanel(year);
+      drawMap(year);
+      drawCharts(year);
+    }
+
+    function updateByYear(year) {
+      update(timelineYears.indexOf(year));
+    }
+
+    function stopPlay() {
+      if (playTimer) clearInterval(playTimer);
+      playTimer = null;
+      playButton.textContent = 'Play';
+    }
+
+    function startPlay() {
+      stopPlay();
+      playButton.textContent = 'Pause';
+      playTimer = setInterval(() => {
+        const nextIndex = currentIndex + 1 >= timelineYears.length ? 0 : currentIndex + 1;
+        update(nextIndex);
+      }, 850);
+    }
+
+    playButton.addEventListener('click', () => {
+      if (playTimer) stopPlay(); else startPlay();
+    });
+
+    backButton.addEventListener('click', () => {
+      stopPlay();
+      update(currentIndex - 1);
+    });
+
+    forwardButton.addEventListener('click', () => {
+      stopPlay();
+      update(currentIndex + 1);
+    });
+
+    slider.addEventListener('input', (event) => {
+      stopPlay();
+      update(Number(event.target.value));
+    });
+
+    initMap();
+    buildMilestones();
+    update(0);
+  </script>
+</body>
+</html>
